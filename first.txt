@@ -1,0 +1,46 @@
+import requests
+from elasticsearch import Elasticsearch
+
+# --- API URL ---
+API_URL = "https://api.torusdigital.com/api/v1/calculator/all-calculators"
+
+# Elastic Cloud Connection
+CLOUD_ID = "new_depolyment:dXMtY2VudHJhbDEuZ2NwLmNsb3VkLmVzLmlvOjQ0MyRkMjVlOTNmYWQyZDQ0YTlhOTUzNTVhMzIzNjA3MzA3ZiQ4NzFmMjNlYjY1YjU0YzhhODY3NzMxZTFlNThjNGNkNg=="
+ES_USER = "elastic"
+ES_PASSWORD = "Ntz6vuhrTXv54P348IDKwyhT"
+
+es = Elasticsearch(
+    cloud_id=CLOUD_ID,
+    basic_auth=(ES_USER, ES_PASSWORD)
+)
+
+INDEX_NAME = "api_data"
+
+# Step 1: Fetch data from API
+response = requests.get(API_URL)
+if response.status_code != 200:
+    raise Exception(f"API request failed: {response.status_code}")
+else:
+ data = response.json()
+
+# Step 2: Create index if not exists
+if not es.indices.exists(index=INDEX_NAME):
+    es.indices.create(index=INDEX_NAME)
+
+# Step 3: Dump/Update data into Elasticsearch
+if isinstance(data, list):  # API returns multiple objects
+    for doc in data:
+        # Use unique key from API as document ID
+        doc_id = doc.get("id") or doc.get("slug") or doc.get("name")
+
+        if not doc_id:
+            # Fallback: generate a unique ID if no stable key exists
+            from hashlib import md5
+            doc_id = md5(str(doc).encode()).hexdigest()
+
+        es.index(index=INDEX_NAME, id=doc_id, document=doc)  # upserts (update or insert)
+else:
+    doc_id = data.get("id") or "single_object"
+    es.index(index=INDEX_NAME, id=doc_id, document=data)
+
+print("Data inserted/updated successfully into Elastic Cloud!")
